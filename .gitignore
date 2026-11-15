@@ -1,0 +1,20 @@
+# build output / scratch renders
+out/
+*.o
+*.obj
+*.pdb
+*.ilk
+*.lib
+*.exp
+
+# offline renders, saves and reference material
+*.ppm
+*.dat
+image-search/
+
+# editor / os noise
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+.DS_Store
