@@ -198,6 +198,121 @@ BlockHit Game::raycast(float maxDist) {
 }
 
 // ------------------------------------------------------------------ world start
+
+// ------------------------------------------------------------------ save game
+static const char* SAVE_WORLD_FILE = "vintageblock_save.dat";
+static const char* SAVE_PLAYER_FILE = "vintageblock_player.dat";
+static const u32 PLAYER_MAGIC = 0x4C504256u;   // "VBPL"
+static const u32 PLAYER_VERSION = 1;
+
+struct PlayerSave {
+    bool ok = false;
+    u32 mode = 0, sel = 0;
+    v3 pos;
+    float yaw = 0, pitch = 0;
+    float health = 100, satiety = 100, stability = 100;
+    float dayTime = 0.3f;
+    int dayCount = 0, season = 0, year = 1, weather = 0;
+    Slot inv[30];
+};
+
+bool saveExists() {
+    FILE* f = fopen(SAVE_WORLD_FILE, "rb");
+    if (!f) return false;
+    fclose(f);
+    return true;
+}
+
+void deleteSave() {
+    remove(SAVE_WORLD_FILE);
+    remove(SAVE_PLAYER_FILE);
+}
+
+bool Game::saveGame() {
+    if (!world.save(SAVE_WORLD_FILE)) return false;
+    FILE* f = fopen(SAVE_PLAYER_FILE, "wb");
+    if (!f) return false;
+    u32 magic = PLAYER_MAGIC, ver = PLAYER_VERSION;
+    u32 modeU = (u32)mode, selU = (u32)sel;
+    fwrite(&magic, 4, 1, f);
+    fwrite(&ver, 4, 1, f);
+    fwrite(&modeU, 4, 1, f);
+    fwrite(&selU, 4, 1, f);
+    fwrite(&pos, sizeof(v3), 1, f);
+    fwrite(&yaw, 4, 1, f);
+    fwrite(&pitch, 4, 1, f);
+    fwrite(&health, 4, 1, f);
+    fwrite(&satiety, 4, 1, f);
+    fwrite(&stability, 4, 1, f);
+    fwrite(&dayTime, 4, 1, f);
+    int dc = dayCount, se = season, yr = year, we = weather;
+    fwrite(&dc, 4, 1, f);
+    fwrite(&se, 4, 1, f);
+    fwrite(&yr, 4, 1, f);
+    fwrite(&we, 4, 1, f);
+    fwrite(inv, sizeof(Slot), 30, f);
+    fclose(f);
+    return true;
+}
+
+static PlayerSave readPlayerSave() {
+    PlayerSave ps;
+    FILE* f = fopen(SAVE_PLAYER_FILE, "rb");
+    if (!f) return ps;
+    u32 magic = 0, ver = 0, modeU = 0, selU = 0;
+    if (fread(&magic, 4, 1, f) != 1 || fread(&ver, 4, 1, f) != 1 || magic != PLAYER_MAGIC || ver != PLAYER_VERSION) {
+        fclose(f);
+        return ps;
+    }
+    if (fread(&modeU, 4, 1, f) != 1 || fread(&selU, 4, 1, f) != 1) { fclose(f); return ps; }
+    ps.mode = modeU; ps.sel = selU;
+    fread(&ps.pos, sizeof(v3), 1, f);
+    fread(&ps.yaw, 4, 1, f);
+    fread(&ps.pitch, 4, 1, f);
+    fread(&ps.health, 4, 1, f);
+    fread(&ps.satiety, 4, 1, f);
+    fread(&ps.stability, 4, 1, f);
+    fread(&ps.dayTime, 4, 1, f);
+    int dc = 0, se = 0, yr = 1, we = 0;
+    fread(&dc, 4, 1, f); fread(&se, 4, 1, f); fread(&yr, 4, 1, f); fread(&we, 4, 1, f);
+    ps.dayCount = dc; ps.season = se; ps.year = yr; ps.weather = we;
+    fread(ps.inv, sizeof(Slot), 30, f);
+    fclose(f);
+    ps.ok = true;
+    return ps;
+}
+
+bool Game::loadGame() {
+    FILE* f = fopen(SAVE_WORLD_FILE, "rb");
+    if (!f) return false;
+    char magic[8] = { 0 };
+    u64 seed = 0;
+    int size = 512;
+    if (fread(magic, 1, 8, f) != 8) { fclose(f); return false; }
+    if (fread(&seed, 8, 1, f) != 1 || fread(&size, 4, 1, f) != 1) { fclose(f); return false; }
+    fclose(f);
+    if (size != 256 && size != 512 && size != 1024) return false;
+
+    PlayerSave ps = readPlayerSave();
+    startWorld(size, seed, ps.ok ? (int)ps.mode : GM_SURVIVAL);
+    world.load(SAVE_WORLD_FILE);
+    if (ps.ok) {
+        pos = ps.pos; yaw = ps.yaw; pitch = ps.pitch;
+        health = ps.health; satiety = ps.satiety; stability = ps.stability;
+        dayTime = ps.dayTime; dayCount = ps.dayCount; season = ps.season;
+        year = ps.year; weather = ps.weather; sel = clampi((int)ps.sel, 0, 9);
+        memcpy(inv, ps.inv, sizeof(inv));
+        vel = v3(0, 0, 0);
+    }
+    // make sure the ground under the player is loaded before the first frame
+    int pcx = floori(pos.x) / CH, pcz = floori(pos.z) / CH;
+    for (int dz = -2; dz <= 2; dz++)
+        for (int dx = -2; dx <= 2; dx++)
+            world.getOrCreateChunk(pcx + dx, pcz + dz);
+    lastHealth = health;
+    return true;
+}
+
 void Game::startWorld(int size, u64 seed, int gameMode) {
     mode = gameMode;
     world.init(size, seed);
@@ -215,6 +330,17 @@ void Game::startWorld(int size, u64 seed, int gameMode) {
             if (!world.inside(x, z)) continue;
             int h = world.coarse.getHeight(x / world.coarse.res, z / world.coarse.res);
             if (h > SEA_LEVEL + 2) {
+                // reject cliff edges : the coarse map around the spot must be flat-ish
+                int r2 = 2;
+                int lo = 9999, hi = -9999;
+                for (int oz = -r2; oz <= r2; oz++)
+                    for (int ox = -r2; ox <= r2; ox++) {
+                        int hh = world.coarse.getHeight(clampi((x / world.coarse.res) + ox, 0, world.coarse.cells - 1),
+                                                       clampi((z / world.coarse.res) + oz, 0, world.coarse.cells - 1));
+                        lo = imin(lo, hh);
+                        hi = imax(hi, hh);
+                    }
+                if (hi - lo > 14 && r < size / 3) continue;
                 int bh = h * 2;
                 const CoarseMap& cm = world.coarse;
                 int bi = cm.biome.empty() ? 3 : cm.biome[cm.at(x / cm.res, z / cm.res)];
@@ -252,6 +378,8 @@ void Game::startWorld(int size, u64 seed, int gameMode) {
         inv[5].item = I_SEEDS; inv[5].count = 8;
     }
     spawnEntities();
+    lastHealth = health;
+    damageFlash = 0.f;
 }
 
 const char* Game::biomeNameAt(int x, int z) {
@@ -306,7 +434,10 @@ void Game::updateEnvironment(float dt) {
         if (r < 68) weather = 0;
         else weather = (biomeTemp(bi) < 25 || season == 3) ? 2 : 1;
     }
+    if (damageFlash > 0) damageFlash = fmaxf(0.f, damageFlash - dt * 1.8f);
     temperature = groundTemperature();
+    if (health < lastHealth - 0.01f) damageFlash = fminf(1.f, damageFlash + (lastHealth - health) * 0.35f);
+    lastHealth = health;
     if (mode == GM_SURVIVAL) {
         satiety -= dt * 0.32f;
         if (satiety < 0) { satiety = 0; health -= dt * 0.8f; }
@@ -529,7 +660,18 @@ void Game::updatePlayer(float dt, InputState& in) {
         if (!flying) {
             if (aabbBlocked(world, pos.x, pos.y, pos.z)) {
                 pos.y -= dy;
-                if (vel.y < 0) onGround = true;
+                if (vel.y < 0) {
+                    onGround = true;
+                    // fall damage: ~13 m/s is a 3 block drop
+                    if (mode == GM_SURVIVAL && vel.y < -13.f && !inWater(world, pos)) {
+                        float dmg = (-vel.y - 13.f) * 1.25f;
+                        if (dmg > 0.5f) {
+                            health -= dmg;
+                            damageFlash = 1.f;
+                            if (dmg > 6.f) notify("OUCH - THAT WAS A LONG WAY DOWN");
+                        }
+                    }
+                }
                 vel.y = 0;
             }
         }

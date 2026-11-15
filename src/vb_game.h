@@ -123,8 +123,12 @@ struct Game {
     bool uiSeedEditing = false;
     bool showDebug = false;
     float menuFade = 0;
+    float damageFlash = 0.f;
+    float lastHealth = 100.f;
 
     void startWorld(int size, u64 seed, int gameMode);
+    bool saveGame();
+    bool loadGame();
     void update(float dt, InputState& in);
     void updatePlayer(float dt, InputState& in);
     void updateEntities(float dt);
@@ -168,4 +172,6 @@ extern const int g_recipeCount;
 
 // simple 5x7 bitmap font used by the HUD
 const u8* fontColumns(char c);   // 5 column bytes, bit0 = top row
+bool saveExists();
+void deleteSave();
 int fontIndex(char c);           // glyph cell index or -1

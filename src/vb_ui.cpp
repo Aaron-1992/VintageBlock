@@ -12,6 +12,7 @@
 #define ACT_SIZE      101
 #define ACT_MODE      102
 #define ACT_SEED      103
+#define ACT_CONTINUE  104
 #define ACT_RESUME    110
 #define ACT_SAVEQUIT  111
 #define ACT_SLOT      120
@@ -25,6 +26,8 @@ static int g_scrW = 1280, g_scrH = 720;
 static GLuint g_atlasTex = 0, g_fontTex = 0;
 static GLuint g_mapTex = 0;
 static u64 g_mapSeed = 0;
+static bool g_hasSave = false;
+static int g_saveTick = 30;
 static int g_mapSize = 0;
 
 // ------------------------------------------------------------------ primitives
@@ -270,9 +273,35 @@ static void drawHUD(Game& g, float mx, float my) {
         textCentered(g.prospectText.c_str(), cx, g_scrH - 226, 1.5f, 0x9ad0f0, (u8)(255 * a));
     }
 
+    // damage flash
+    if (g.damageFlash > 0.01f) {
+        float a = fminf(1.f, g.damageFlash) * 0.55f;
+        quad(0, 0, g_scrW, g_scrH, 0x8a1410, (u8)(a * 255));
+    }
+
+    // world still streaming in
+    {
+        int pcx = floori(g.pos.x) / CH, pcz = floori(g.pos.z) / CH;
+        int have = 0, need = 0;
+        for (int dz = -3; dz <= 3; dz++)
+            for (int dx = -3; dx <= 3; dx++) {
+                int ccx = pcx + dx, ccz = pcz + dz;
+                if (ccx < 0 || ccz < 0 || ccx >= g.world.chunksX || ccz >= g.world.chunksX) continue;
+                need++;
+                if (g.world.chunkAt(ccx, ccz)) have++;
+            }
+        if (need > 0 && have < need) {
+            float w = 260, p = have / (float)need;
+            float by = g_scrH - 78;
+            quad(cx - w * 0.5f, by, w, 10, 0x14100c, 190);
+            quad(cx - w * 0.5f, by, w * p, 10, 0x9ec86a, 220);
+            textCentered("GENERATING WORLD", cx, by - 20, 1.5f, 0xe8e0c8, 220);
+        }
+    }
+
     // held item (bottom right, simple hand view)
     if (g.inv[g.sel].item) {
-        float s = 88;
+        float s = 76;
         float swing = g.swing * 26.f;
         float hx = g_scrW - s - 34 + swing, hy = g_scrH - s - 60 + swing * 0.5f;
         quad(hx - 6, hy - 6, s + 12, s + 12, 0x14100c, 110);
@@ -403,6 +432,12 @@ static void drawMenu(Game& g, float mx, float my) {
     outline(bx, y, bw, bh, g.uiSeedEditing ? 0xffe080 : 0x181410, 235);
     textCentered(g.uiSeed, cx, y + 13, 1.9f, 0xf0e6d0);
     y += bh + 34;
+    if (g_hasSave) {
+        quad(bx, y, bw, 52, 0x3f5a2a, 245);
+        outline(bx, y, bw, 52, 0xb8e080, 245);
+        textCentered("CONTINUE WORLD", cx, y + 16, 2.4f, 0xf0ffd8);
+        y += 62;
+    }
     quad(bx, y, bw, 52, 0x7a5a2a, 245);
     outline(bx, y, bw, 52, 0xffe0a0, 245);
     textCentered("CREATE WORLD", cx, y + 16, 2.4f, 0xfff4d8);
@@ -410,6 +445,9 @@ static void drawMenu(Game& g, float mx, float my) {
     textCentered("WASD MOVE   SHIFT RUN   SPACE JUMP   MOUSE LOOK", cx, g_scrH - 96, 1.4f, 0xc0b498);
     textCentered("LMB MINE / ATTACK   RMB USE / PLACE   E INVENTORY   C CRAFTING", cx, g_scrH - 76, 1.4f, 0xc0b498);
     textCentered("1-0 HOTBAR   F FLY (CREATIVE)   F3 DEBUG   ESC PAUSE", cx, g_scrH - 56, 1.4f, 0xc0b498);
+    char vbuf[64];
+    snprintf(vbuf, sizeof(vbuf), "VERSION %s %s   -   WORLDS ARE FINITE BY DESIGN", VB_VERSION, VB_VERSION_TAG);
+    textCentered(vbuf, cx, g_scrH - 30, 1.2f, 0x8a9478, 200);
 }
 
 static void drawPause(Game& g) {
@@ -427,6 +465,7 @@ static void drawPause(Game& g) {
 
 // ------------------------------------------------------------------ entry
 void renderUI(Renderer* r, Game& g, float mx, float my, int W, int H) {
+    if (g.screen == 0 && ++g_saveTick > 30) { g_saveTick = 0; g_hasSave = saveExists(); }
     g_scrW = W; g_scrH = H;
     g_atlasTex = renderAtlas(r);
     g_fontTex = renderFontTex(r);
@@ -468,6 +507,10 @@ int uiHitTest(Game& g, int W, int H, float mx, float my) {
         y += bh + 22;
         if (inRect(bx, y, bw, bh)) return ACT_SEED * 1000;
         y += bh + 34;
+        if (g_hasSave) {
+            if (inRect(bx, y, bw, 52)) return ACT_CONTINUE * 1000;
+            y += 62;
+        }
         if (inRect(bx, y, bw, 52)) return ACT_START * 1000;
         return -1;
     }

@@ -5,6 +5,9 @@
 #include "vb_game.h"
 #include "vb_render.h"
 
+#define IDI_VB_ICON 101
+static void setMouseCapture(bool on);
+
 static Game* g_game = nullptr;
 static Renderer* g_render = nullptr;
 static int g_w = 1280, g_h = 720;
@@ -65,6 +68,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_KILLFOCUS:
         memset(g_input.key, 0, sizeof(g_input.key));
         memset(g_input.mouse, 0, sizeof(g_input.mouse));
+        if (g_game && g_game->screen == 1 && !g_game->paused) {
+            g_game->paused = true;
+            setMouseCapture(false);
+        }
         return 0;
     }
     if (msg == WM_SETCURSOR) {
@@ -229,8 +236,8 @@ static void handleActions(Game& g) {
     if (g_input.keyDown[VK_F1]) g.viewDistance = (g.viewDistance > 10.f) ? 6.f : g.viewDistance + 2.f;
     if (g_input.keyDown['F'] && g.mode == GM_CREATIVE) g.flying = !g.flying;
     if (g_input.keyDown[VK_F5]) {
-        g.world.save("vintageblock_save.dat");
-        g.notify("WORLD SAVED");
+        if (g.saveGame()) g.notify("WORLD SAVED");
+        else g.notify("SAVE FAILED");
     }
     if (g.craftOpen && g_input.wheel != 0) {
         g.craftScroll += (g_input.wheel > 0 ? -1 : 1);
@@ -245,6 +252,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInst;
     wc.hCursor = nullptr;
+    wc.hIcon = LoadIconA(hInst, MAKEINTRESOURCEA(IDI_VB_ICON));
     wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
     wc.lpszClassName = "VintageBlockWindow";
     wc.style = CS_OWNDC;
@@ -253,7 +261,9 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     DWORD style = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
     RECT rect = { 0, 0, g_w, g_h };
     AdjustWindowRect(&rect, style, FALSE);
-    HWND hwnd = CreateWindowA("VintageBlockWindow", "VintageBlock - a Vintage Story inspired sandbox",
+    char title[128];
+    snprintf(title, sizeof(title), "VintageBlock %s %s  -  a Vintage Story inspired sandbox", VB_VERSION, VB_VERSION_TAG);
+    HWND hwnd = CreateWindowA("VintageBlockWindow", title,
                               style, CW_USEDEFAULT, CW_USEDEFAULT,
                               rect.right - rect.left, rect.bottom - rect.top, nullptr, nullptr, hInst, nullptr);
     if (!hwnd) return 1;
@@ -350,9 +360,23 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
                 }
                 case 110: g_game->paused = false; setMouseCapture(true); break;
                 case 111:
-                    g_game->world.save("vintageblock_save.dat");
+                    g_game->saveGame();
                     g_running = false;
                     break;
+                case 104: {
+                    if (g_game->loadGame()) {
+                        g_game->screen = 1;
+                        g_game->paused = false;
+                        g_game->invOpen = false;
+                        g_game->craftOpen = false;
+                        g_game->uiSeedEditing = false;
+                        g_lastCullY = (int)g_game->pos.y;
+                        setMouseCapture(true);
+                    } else {
+                        g_game->notify("SAVE COULD NOT BE LOADED");
+                    }
+                    break;
+                }
                 case 120: {
                     int i = arg;
                     if (i < 10) g_game->sel = i;
@@ -407,7 +431,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
         g_input.endFrame();
     }
 
-    if (g_game && g_game->screen == 1) g_game->world.save("vintageblock_save.dat");
+    if (g_game && g_game->screen == 1) g_game->saveGame();
     if (g_game) g_game->world.shutdown();
     wglMakeCurrent(nullptr, nullptr);
     wglDeleteContext(glrc);

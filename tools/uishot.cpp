@@ -234,7 +234,14 @@ int main(int argc, char** argv) {
     g.startWorld(512, 12345, GM_SURVIVAL);
     g.health = 78; g.satiety = 61; g.temperature = 12.5f; g.stability = 88;
     g.dayTime = 0.34f; g.dayCount = 12; g.season = 1;
-    g.world.getOrCreateChunk(8, 8);
+    // generate the visible neighbourhood so the "generating world" overlay stays hidden
+    {
+        int pcx = floori(g.pos.x) / CH, pcz = floori(g.pos.z) / CH;
+        for (int dz = -3; dz <= 3; dz++)
+            for (int dx = -3; dx <= 3; dx++)
+                if (pcx + dx >= 0 && pcz + dz >= 0 && pcx + dx < g.world.chunksX && pcz + dz < g.world.chunksX)
+                    g.world.getOrCreateChunk(pcx + dx, pcz + dz);
+    }
     g.hit = g.raycast(6.f);
     // a believable inventory
     struct { int item, count, dur; } it[] = {

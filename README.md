@@ -1,9 +1,13 @@
 # VintageBlock
 
-A **Vintage Story–inspired voxel sandbox**, written from scratch in C++17 with no
-external dependencies. One self-contained Windows executable, all textures generated
-procedurally at startup (8×8 pixel art), geology-based world generation, four levels
-of terrain LOD and hard-bounded worlds of 256×256, 512×512 or 1024×1024 blocks.
+<img src="docs/icon.png" width="96" align="right" alt="VintageBlock icon">
+
+**0.1.0 indev** — a *Vintage Story*–inspired voxel sandbox, written from scratch in C++17
+with no external dependencies. One self-contained Windows executable, all textures painted
+procedurally at startup (8×8 pixel art), geology-based world generation, four levels of
+terrain LOD, and hard-bounded worlds of 256×256, 512×512 or 1024×1024 blocks.
+
+[**Download the latest build**](../../releases/latest) — `VintageBlock.exe`, nothing to install.
 
 ![VintageBlock](docs/screenshot-world.png)
 
@@ -12,18 +16,20 @@ of terrain LOD and hard-bounded worlds of 256×256, 512×512 or 1024×1024 block
 ## Run it
 
 ```
-dist\VintageBlock.exe
+VintageBlock.exe
 ```
 
-Double-click it, or run from a terminal. Requirements:
+Double-click it, or run it from a terminal. Requirements:
 
 * Windows 7 or newer, x86_64
 * OpenGL 1.1 (present on every Windows install; the game only needs the fixed-function
   pipeline and falls back to client-side vertex arrays when VBOs are unavailable)
 * ~120 MB RAM with the default view distance
 
-Nothing to install, no DLLs, no asset files. The world is generated from the seed you
-type in the menu, and the texture atlas is painted by code at startup.
+Nothing to install, no DLLs, no asset files. The world is generated from the seed you type
+in the menu, and the texture atlas is painted by code at startup. Saves go next to the exe
+(`vintageblock_save.dat` / `vintageblock_player.dat`) — pick **CONTINUE WORLD** in the menu
+to resume.
 
 ## Controls
 
@@ -75,6 +81,7 @@ knife, a flint axe, a flint pickaxe, torches, some bread and seeds.
 ### Survival systems
 * **Health, satiety, body temperature, temporal stability.** Cold or heat drain health,
   hunger drains health once satiety is empty, food restores satiety (some give buffs).
+  Falls hurt: anything past a three-block drop costs health.
 * **Body temperature** is computed from biome temperature, altitude, season, time of day
   and distance to the nearest lit firepit — not a fake constant.
 * **Seasons & weather** – 8-day seasons, a 4-season year; temperature swings ±12 °C
@@ -91,8 +98,8 @@ knife, a flint axe, a flint pickaxe, torches, some bread and seeds.
 * **Crafting** – 30 recipes: knapping (flint knife/axe/pickaxe/shovel), planks, sticks,
   stone bricks, torches, rope, bowls, firepit, clay pots, smelting copper/bronze/iron
   ingots, tools, gears, bread, stew. Firepit-required recipes need a firepit nearby.
-* **Farming** – till-free crop blocks planted on grass, growth over ~3 stages driven by
-  temperature and season, harvest back to seeds plus food.
+* **Farming** – crop blocks planted on grass, growth over ~3 stages driven by temperature
+  and season, harvest back to seeds plus food.
 
 ## Rendering
 
@@ -108,17 +115,18 @@ knife, a flint axe, a flint pickaxe, torches, some bread and seeds.
   is always visible, never a void.
 * **Sky.** Gradient sky driven by a day/night palette, sun and moon billboards, 220
   hash-placed stars, two scrolling procedural cloud layers, linear fog matched to the
-  horizon colour.
+  horizon colour, rain and snow.
 * **UI** is immediate mode: a 5×7 bitmap font, an item/block icon atlas, a procedural
-  minimap of the whole bounded world, and the crosshair/held-item view.
+  minimap of the whole bounded world, durability bars, a damage flash, and the
+  crosshair/held-item view.
 
-![Inventory](docs/screenshot-crafting.png)
+![Crafting](docs/screenshot-crafting.png)
 
 ## Project layout
 
 ```
-src/vb_common.h    vectors, matrices, frustum, RNG, noise, colour helpers
-src/vb_math.cpp    look-at / frustum extraction
+src/vb_common.h        vectors, matrices, frustum, RNG, noise, colour helpers
+src/vb_math.cpp        look-at / frustum extraction
 src/vb_blocks.h/.cpp   block + item registry, procedural 8x8 texture painters
 src/vb_world.h/.cpp    voxel storage (memory compressed sections), light, save/load
 src/vb_worldgen.cpp    climate, strata, ores, caves, trees, plants, coarse map
@@ -127,6 +135,7 @@ src/vb_game.h/.cpp     player physics, inventory, crafting, entities, day cycle,
 src/vb_render.h/.cpp   OpenGL scene renderer (atlas, sky, clouds, LOD, particles)
 src/vb_ui.cpp          HUD, inventory, crafting, menus, hit testing
 src/vb_main.cpp        Win32 window, WGL context, input, main loop
+src/app.rc             icon + version resource
 tools/                 offline soft renderers used to develop without a GPU
 ```
 
@@ -151,15 +160,17 @@ pip install ziglang      # or install zig
 |---|---|
 | `out/preview` | software rasteriser that renders the real chunk mesher to a PNG (`--size --seed --cam --yaw --pitch --radius --map`) |
 | `out/uishot` | rasterises the real UI code through a tiny fake GL, so the HUD can be screenshotted headless |
-| `out/sim` | headless gameplay loop: walk, dig, place, craft, fight, save/load, registry audit |
+| `out/sim` | headless gameplay loop: walk, dig, place, craft, fall, fight, save/load, registry audit |
 | `out/atlas_dump` | writes the generated texture atlas to a PNG |
 
-## Notes & limits
+## Known limitations (indev)
 
-* The world is deliberately finite: no infinite terrain, so you can walk to the edge.
-* Save files (`vintageblock_save.dat`, written next to the exe) store the seed, size,
-  mode, all block edits and your player state.
-* The renderer targets OpenGL 1.1 fixed function on purpose so the exe runs on anything,
-  including VMs and remote desktops. VBOs are used when the driver exposes them.
-* Verified headless: worldgen statistics, all three world sizes, save/load round-trip,
-  mesh budgets, crafting and the UI layout (see `tools/sim.cpp` and `tools/uishot.cpp`).
+* No sound yet.
+* Crafting is a recipe list, not a grid; there is no visual crafting grid UI.
+* No multiplayer, no world list — one save slot, saved next to the exe.
+* The renderer targets OpenGL 1.1 fixed function on purpose so the exe runs anywhere,
+  including VMs and remote desktops; there are no shaders, no shadows, no bloom.
+* Verified headless: worldgen statistics, all three world sizes, physics and fall damage,
+  save/load round-trip, mesh budgets, crafting and the UI layout (`tools/sim.cpp`,
+  `tools/uishot.cpp`). The Windows binary itself has not been exercised on real hardware
+  in this environment — report anything that breaks.

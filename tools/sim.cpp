@@ -152,11 +152,19 @@ int main(int argc, char** argv) {
     }
 
     // ---- 7. save / load
-    g.world.save("out/test_save.dat");
+    g.world.set(10, 120, 10, B_TORCH);
+    g.saveGame();
     Game g2;
-    bool ok = g2.world.load("out/test_save.dat");
+    bool ok = g2.loadGame();
     printf("save/load: %s, edits %d, size %d seed %llu\n", ok ? "ok" : "FAILED",
            (int)g2.world.edits.size(), g2.world.size, (unsigned long long)g2.world.seed);
+    printf("  player restored: pos %.1f %.1f %.1f (was %.1f %.1f %.1f) hp %.0f sel %d item0 %d\n",
+           g2.pos.x, g2.pos.y, g2.pos.z, g.pos.x, g.pos.y, g.pos.z, g2.health, g2.sel, g2.inv[0].item);
+    // fall damage check
+    g2.pos.y += 30;
+    g2.vel = v3(0, 0, 0);
+    for (int f = 0; f < 240; f++) { InputState i2; i2.dt = 1.f/60.f; g2.update(1.f/60.f, i2); i2.endFrame(); if (g2.onGround) break; }
+    printf("  fall from +30: health %.0f onGround %d\n", g2.health, (int)g2.onGround);
 
     // ---- 8. world border
     printf("border block at x=-1: %d  x=%d: %d  y=300: %d\n", g.world.get(-1, 100, 100),

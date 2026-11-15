@@ -22,13 +22,17 @@ exit /b 1
 
 :msvc
 echo ==^> building with MSVC
-cl /nologo /O2 /std:c++17 /EHsc /DNDEBUG /Fe:dist\VintageBlock.exe %SRC% /link /SUBSYSTEM:WINDOWS %LIBS%
+rc /nologo /fo app.res src\app.rc
+if errorlevel 1 exit /b 1
+cl /nologo /O2 /std:c++17 /EHsc /DNDEBUG /Fe:dist\VintageBlock.exe %SRC% app.res /link /SUBSYSTEM:WINDOWS %LIBS%
 if errorlevel 1 exit /b 1
 goto done
 
 :mingw
 echo ==^> building with MinGW-w64
-g++ -std=c++17 -O2 -mwindows %SRC% -o dist\VintageBlock.exe -lopengl32 -lgdi32 -luser32 -static-libstdc++ -static-libgcc
+windres src\app.rc -O coff -o app.res
+if errorlevel 1 exit /b 1
+g++ -std=c++17 -O2 -mwindows %SRC% app.res -o dist\VintageBlock.exe -lopengl32 -lgdi32 -luser32 -static-libstdc++ -static-libgcc
 if errorlevel 1 exit /b 1
 goto done
 

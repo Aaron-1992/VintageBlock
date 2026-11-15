@@ -110,7 +110,7 @@ static void paintTile(int t, Px& p) {
         speckles(p, 0x9a9a96, s, 5); speckles(p, 0x66665f, s + 1, 4); break;
     case T_BASALT: fillNoise(p, 0x585a60, 0x4a4c52, s, 50); speckles(p, 0x6c6e74, s, 4); break;
     case T_LIMESTONE: fillNoise(p, 0xbfb79f, 0xcdc6ae, s, 45); speckles(p, 0xa8a08a, s, 5); break;
-    case T_CHALK: fillNoise(p, 0xdcd8cc, 0xebe7db, s, 40); speckles(p, 0xcfcabd, s, 4); break;
+    case T_CHALK: fillNoise(p, 0xc9c4b3, 0xd8d3c2, s, 40); speckles(p, 0xbcb7a6, s, 4); break;
     case T_SLATE: fillNoise(p, 0x6a7080, 0x5e6474, s, 45);
         for (int x = 0; x < 8; x++) if (hash2i(x, 1, s) % 3 == 0) p.c[3][x] = 0x565c6c; break;
     case T_SANDSTONE: {

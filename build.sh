@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 
 SRC="src/vb_math.cpp src/vb_blocks.cpp src/vb_world.cpp src/vb_worldgen.cpp \
      src/vb_mesh.cpp src/vb_game.cpp src/vb_font.cpp src/vb_render.cpp \
-     src/vb_ui.cpp src/vb_main.cpp"
+     src/vb_ui.cpp src/vb_main.cpp src/app.rc"
 
 CXX=${CXX:-zig c++}
 TARGET=${TARGET:-x86_64-windows-gnu}
