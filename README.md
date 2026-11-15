@@ -7,7 +7,9 @@ with no external dependencies. One self-contained Windows executable, all textur
 procedurally at startup (8×8 pixel art), geology-based world generation, four levels of
 terrain LOD, and hard-bounded worlds of 256×256, 512×512 or 1024×1024 blocks.
 
-[**Download the latest build**](../../releases/latest) — `VintageBlock.exe`, nothing to install.
+[**Download VintageBlock.exe**](https://github.com/Aaron-1992/VintageBlock/raw/v0.1.0-indev/dist/VintageBlock.exe)
+· [release notes](https://github.com/Aaron-1992/VintageBlock/releases/tag/v0.1.0-indev)
+— 710 KB, nothing to install.
 
 ![VintageBlock](docs/screenshot-world.png)
 
