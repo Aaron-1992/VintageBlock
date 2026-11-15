@@ -292,7 +292,9 @@ void buildChunkMesh(World& w, Chunk& c, int lod, MeshData& out, int cullBelowY) 
             int x0 = baseX + x * step, z0 = baseZ + z * step;
             int x1 = x0 + step, z1 = z0 + step;
             int h = cc.h;
-            float bright = cc.water ? 0.85f : 1.0f;
+            // per-cell dither so distant terrain does not read as one flat colour
+            float jit = 0.94f + 0.12f * ((hash2i(x0, z0, 0x51u) % 100) / 100.f);
+            float bright = (cc.water ? 0.85f : 1.0f) * jit;
             u32 col = shadeColor(cc.col, bright * 1.0f);
             float u0, v0, u1, v1;
             tileUV(cc.water ? T_WATER : T_GRASS_TOP, u0, v0, u1, v1);
@@ -311,7 +313,7 @@ void buildChunkMesh(World& w, Chunk& c, int lod, MeshData& out, int cullBelowY) 
             for (int side = 0; side < 4; side++) {
                 if (hn[side] >= h) continue;
                 int yLo = imax(0, hn[side] - 2);
-                u32 scol = shadeColor(cc.col, 0.72f);
+                u32 scol = shadeColor(cc.col, 0.72f * jit);
                 if (side == 0) {
                     Vtx p0 = { (float)x0, (float)h, (float)z0, u0, v0, scol };
                     Vtx p1 = { (float)x1, (float)h, (float)z0, u1, v0, scol };

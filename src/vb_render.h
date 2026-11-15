@@ -25,5 +25,7 @@ int renderStatsVerts(Renderer* r);
 int renderStatsChunks(Renderer* r);
 int renderStatsFarVerts(Renderer* r);
 void renderFlushTrash(Renderer* r);
+void renderSetFilter(Renderer* r, int mode);   // 0 mipmap, 1 nearest, 2 linear
+int renderGetFilter(Renderer* r);
 unsigned int renderAtlas(Renderer* r);
 unsigned int renderFontTex(Renderer* r);

@@ -73,6 +73,53 @@ static void outline(float x, float y, float w, float h, u32 c, u8 a = 255) {
     quad(x + w - 2, y, 2, h, c, a);
 }
 
+// tile a block texture across an arbitrary rectangle (tight uvs, no bleeding)
+static void texTiled(float x, float y, float wPx, float hPx, int tile, u32 tint, u8 a, float cell) {
+    float u0, v0, u1, v1;
+    tileUV(tile, u0, v0, u1, v1);
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, g_atlasTex);
+    glColor4ub((u8)(tint >> 16), (u8)(tint >> 8), (u8)tint, a);
+    glBegin(GL_QUADS);
+    for (float yy = 0; yy < hPx - 0.01f; yy += cell) {
+        float ch = fminf(cell, hPx - yy);
+        float fv = ch / cell;
+        for (float xx = 0; xx < wPx - 0.01f; xx += cell) {
+            float cw = fminf(cell, wPx - xx);
+            float fu = cw / cell;
+            float ax = x + xx, ay = y + yy;
+            float bu = u0 + (u1 - u0) * fu, bv = v0 + (v1 - v0) * fv;
+            glTexCoord2f(u0, v0); glVertex2f(ax, ay);
+            glTexCoord2f(bu, v0); glVertex2f(ax + cw, ay);
+            glTexCoord2f(bu, bv); glVertex2f(ax + cw, ay + ch);
+            glTexCoord2f(u0, bv); glVertex2f(ax, ay + ch);
+        }
+    }
+    glEnd();
+}
+
+// a wooden/stone panel with a bevel : the container for every window
+static void panel(float x, float y, float w, float h, int tile, u32 tint, float cell = 26.f) {
+    quad(x - 3, y - 3, w + 6, h + 6, 0x0d0a07, 210);
+    texTiled(x, y, w, h, tile, tint, 255, cell);
+    quad(x, y, w, 2, 0xf0e0c0, 45);
+    quad(x, y, 2, h, 0xf0e0c0, 35);
+    quad(x, y + h - 2, w, 2, 0x000000, 90);
+    quad(x + w - 2, y, 2, h, 0x000000, 80);
+    outline(x - 3, y - 3, w + 6, h + 6, 0x0d0a07, 235);
+    outline(x, y, w, h, 0x6a5a42, 150);
+}
+
+// a button : same idea, brighter when selected
+static void button(float x, float y, float w, float h, int tile, bool hot) {
+    u32 tint = hot ? 0x8a6a3a : 0x5a4630;
+    quad(x - 2, y - 2, w + 4, h + 4, 0x0d0a07, 200);
+    texTiled(x, y, w, h, tile, tint, 255, 22.f);
+    quad(x, y, w, 2, 0xf0e0c0, hot ? 90 : 45);
+    quad(x, y + h - 2, w, 2, 0x000000, 90);
+    outline(x, y, w, h, hot ? 0xffe0a0 : 0x2a2018, hot ? 220 : 190);
+}
+
 static void texQuad(float x, float y, float w, float h, int tile, u32 tint, u8 alpha = 255) {
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, g_atlasTex);
@@ -135,8 +182,11 @@ static void drawItemIcon(u16 item, float x, float y, float size) {
 }
 
 static void drawSlot(float x, float y, float size, Slot& s, bool selected) {
-    quad(x, y, size, size, selected ? 0xc8b083 : 0x3a3228, selected ? 235 : 190);
-    outline(x, y, size, size, selected ? 0xf0dca8 : 0x181410, 220);
+    quad(x - 2, y - 2, size + 4, size + 4, 0x0d0a07, 200);
+    texTiled(x, y, size, size, T_PLANK_OAK, selected ? 0xd8b070 : 0x7a6446, 255, size * 0.5f);
+    quad(x, y, size, 2, 0xffffff, selected ? 70 : 25);
+    quad(x, y + size - 2, size, 2, 0x000000, 80);
+    outline(x, y, size, size, selected ? 0xffe8b0 : 0x2a2018, 230);
     if (s.item) {
         drawItemIcon(s.item, x + size * 0.12f, y + size * 0.12f, size * 0.76f);
         if (s.count > 1) {
@@ -207,7 +257,7 @@ static void drawHUD(Game& g, float mx, float my) {
     // stats
     float sx = 100, sy = g_scrH - 118;
     quad(sx - 8, sy - 10, 190, 108, 0x1a1510, 150);
-    quad(sx - 70, sy - 8, 254, 86, 0x1a1510, 130);
+    panel(sx - 70, sy - 8, 254, 86, T_COBBLE_DARK, 0x4a453c, 20.f);
     drawBar(sx, sy, 170, 10, g.health / g.maxHealth, 0xc0392b, "HP");
     drawBar(sx, sy + 20, 170, 10, g.satiety / g.maxSatiety, 0xd08b3a, "SATIETY");
     float tempFrac = saturate((g.temperature + 15.f) / 60.f);
@@ -340,8 +390,7 @@ static void drawInventory(Game& g) {
     float gridW = 10 * slot + 9 * gap;
     float gx = cx - gridW * 0.5f;
     float gy = g_scrH * 0.5f - 130;
-    quad(cx - gridW * 0.5f - 22, gy - 46, gridW + 44, 320, 0x241c14, 235);
-    outline(cx - gridW * 0.5f - 22, gy - 46, gridW + 44, 320, 0xc8b083, 235);
+    panel(cx - gridW * 0.5f - 22, gy - 46, gridW + 44, 320, T_PLANK_KAPOK, 0x6e5a42, 30.f);
     textCentered("INVENTORY", cx, gy - 36, 2.0f, 0xf0e6d0);
     for (int r = 0; r < 3; r++)
         for (int c = 0; c < 10; c++) {
@@ -373,7 +422,9 @@ static void drawCrafting(Game& g, std::vector<int>& avail) {
         const Recipe& rec = g_recipes[avail[idx]];
         float ry = y + 58 + r * 38.f;
         bool hov = false;
-        quad(x + 14, ry, w - 28, 34, hov ? 0x3a2f22 : 0x2e2519, 220);
+        texTiled(x + 14, ry, w - 28, 34, T_PLANK_OAK, hov ? 0x9a7c54 : 0x7d6548, 240, 34.f);
+        quad(x + 14, ry, w - 28, 2, 0xffffff, 26);
+        quad(x + 14, ry + 32, w - 28, 2, 0x000000, 60);
         drawItemIcon(rec.out, x + 20, ry + 3, 28);
         char buf[128];
         snprintf(buf, sizeof(buf), "%s X%d", rec.name, (int)rec.outCount);
@@ -384,7 +435,8 @@ static void drawCrafting(Game& g, std::vector<int>& avail) {
         if (rec.b) { ItemDef* db = itemDef(rec.b); snprintf(ing + strlen(ing), sizeof(ing) - strlen(ing), "%dx%s ", (int)rec.bn, db ? db->name : "?"); }
         if (rec.c) { ItemDef* dc = itemDef(rec.c); snprintf(ing + strlen(ing), sizeof(ing) - strlen(ing), "%dx%s", (int)rec.cn, dc ? dc->name : "?"); }
         text(ing, x + 56, ry + 20, 1.0f, 0xa89c84);
-        text("CRAFT >", x + w - 90, ry + 10, 1.4f, 0x9ad07a);
+        button(x + w - 96, ry + 4, 78, 26, T_STONE_BRICK, false);
+        text("CRAFT", x + w - 77, ry + 9, 1.3f, 0xd8f0b0);
     }
     if (avail.empty()) textCentered("NO RECIPES AVAILABLE - GATHER MATERIALS", cx, y + 200, 1.5f, 0xa89c84);
     textCentered("SCROLL TO SEE MORE   -   C / ESC TO CLOSE", cx, y + h - 24, 1.2f, 0xb8ac94);
@@ -393,11 +445,14 @@ static void drawCrafting(Game& g, std::vector<int>& avail) {
 // ------------------------------------------------------------------ menus
 static void drawMenu(Game& g, float mx, float my) {
     (void)mx; (void)my;
-    // background : deep forest gradient
-    for (int i = 0; i < 24; i++) {
-        float t = i / 23.f;
-        u32 c = lerpColor(rgb(28, 42, 32), rgb(72, 92, 58), t);
-        quad(0, g_scrH * t, g_scrW, g_scrH / 23.f + 1, c, 255);
+    // background : tiled stone with a warm wash and a dark crown
+    texTiled(0, 0, g_scrW, g_scrH, T_COBBLE_DARK, 0x5a6a4e, 255, 64.f);
+    for (int i = 0; i < 64; i++) {
+        float t = i / 63.f;
+        // dark at the top and bottom, open in the middle where the controls sit
+        float k = 1.f - fabsf(t - 0.55f) * 1.35f;
+        u32 c = lerpColor(rgb(6, 10, 7), rgb(40, 56, 30), saturate(k));
+        quad(0, g_scrH * t, g_scrW, g_scrH / 63.f + 1, c, (u8)(70 + 120 * saturate(1.f - t * 0.85f)));
     }
     float cx = g_scrW * 0.5f;
     textCentered("VINTAGEBLOCK", cx, g_scrH * 0.16f, 5.0f, 0xf0e0b8);
@@ -412,9 +467,8 @@ static void drawMenu(Game& g, float mx, float my) {
     for (int i = 0; i < 3; i++) {
         float bxi = cx - 240 + i * 165;
         bool selSize = g.uiSize == i;
-        quad(bxi, y, 155, bh, selSize ? 0xc8b083 : 0x3a3228, 235);
-        outline(bxi, y, 155, bh, selSize ? 0xfff0c0 : 0x181410, 235);
-        textCentered(sizeNames[i], bxi + 77, y + 13, 1.7f, selSize ? 0x201810 : 0xe0d4b8);
+        button(bxi, y, 155, bh, T_STONE_BRICK, selSize);
+        textCentered(sizeNames[i], bxi + 77, y + 13, 1.7f, selSize ? 0xfff4d8 : 0xcfc2a4);
     }
     y += bh + 22;
     textCentered("GAME MODE", cx, y - 19, 1.8f, 0xe8dcc0);
@@ -422,24 +476,26 @@ static void drawMenu(Game& g, float mx, float my) {
     for (int i = 0; i < 2; i++) {
         float bxi = cx - 160 + i * 165;
         bool selM = g.uiMode == i;
-        quad(bxi, y, 155, bh, selM ? 0xc8b083 : 0x3a3228, 235);
-        outline(bxi, y, 155, bh, selM ? 0xfff0c0 : 0x181410, 235);
-        textCentered(modeNames[i], bxi + 77, y + 13, 1.7f, selM ? 0x201810 : 0xe0d4b8);
+        button(bxi, y, 155, bh, T_STONE_BRICK, selM);
+        textCentered(modeNames[i], bxi + 77, y + 13, 1.7f, selM ? 0xfff4d8 : 0xcfc2a4);
     }
     y += bh + 22;
     textCentered("WORLD SEED", cx, y - 19, 1.8f, 0xe8dcc0);
-    quad(bx, y, bw, bh, g.uiSeedEditing ? 0x4a3f2e : 0x2e2519, 235);
-    outline(bx, y, bw, bh, g.uiSeedEditing ? 0xffe080 : 0x181410, 235);
+    button(bx, y, bw, bh, T_PLANK_OAK, g.uiSeedEditing);
     textCentered(g.uiSeed, cx, y + 13, 1.9f, 0xf0e6d0);
     y += bh + 34;
     if (g_hasSave) {
-        quad(bx, y, bw, 52, 0x3f5a2a, 245);
-        outline(bx, y, bw, 52, 0xb8e080, 245);
-        textCentered("CONTINUE WORLD", cx, y + 16, 2.4f, 0xf0ffd8);
+        quad(bx - 2, y - 2, bw + 4, 56, 0x0d0a07, 200);
+        texTiled(bx, y, bw, 52, T_PLANK_OAK, 0x5e7a3a, 255, 26.f);
+        quad(bx, y, bw, 2, 0xd8ffa8, 70);
+        outline(bx, y, bw, 52, 0xb8e080, 235);
+        textCentered("CONTINUE WORLD", cx, y + 16, 2.4f, 0xf4ffe0);
         y += 62;
     }
-    quad(bx, y, bw, 52, 0x7a5a2a, 245);
-    outline(bx, y, bw, 52, 0xffe0a0, 245);
+    quad(bx - 2, y - 2, bw + 4, 56, 0x0d0a07, 200);
+    texTiled(bx, y, bw, 52, T_PLANK_OAK, 0x9a6a2a, 255, 26.f);
+    quad(bx, y, bw, 2, 0xffe0a0, 90);
+    outline(bx, y, bw, 52, 0xffc860, 235);
     textCentered("CREATE WORLD", cx, y + 16, 2.4f, 0xfff4d8);
 
     textCentered("WASD MOVE   SHIFT RUN   SPACE JUMP   MOUSE LOOK", cx, g_scrH - 96, 1.4f, 0xc0b498);
@@ -451,16 +507,16 @@ static void drawMenu(Game& g, float mx, float my) {
 }
 
 static void drawPause(Game& g) {
-    quad(0, 0, g_scrW, g_scrH, 0x0a0a08, 170);
+    quad(0, 0, g_scrW, g_scrH, 0x060604, 175);
     float cx = g_scrW * 0.5f, cy = g_scrH * 0.5f;
-    textCentered("PAUSED", cx, cy - 110, 4.0f, 0xf0e0b8);
+    panel(cx - 210, cy - 160, 420, 300, T_PLANK_OAK, 0x6e5a42, 30.f);
+    textCentered("PAUSED", cx, cy - 130, 4.0f, 0xf0e0b8);
     float bw = 300, bh = 44;
-    quad(cx - bw * 0.5f, cy - 40, bw, bh, 0x3a3228, 240);
-    outline(cx - bw * 0.5f, cy - 40, bw, bh, 0xfff0c0, 240);
-    textCentered("CONTINUE", cx, cy - 27, 1.9f, 0xf0e6d0);
-    quad(cx - bw * 0.5f, cy + 20, bw, bh, 0x3a3228, 240);
-    outline(cx - bw * 0.5f, cy + 20, bw, bh, 0xfff0c0, 240);
-    textCentered("SAVE AND QUIT", cx, cy + 33, 1.9f, 0xf0e6d0);
+    button(cx - bw * 0.5f, cy - 40, bw, bh, T_STONE_BRICK, false);
+    textCentered("CONTINUE", cx, cy - 27, 1.9f, 0xfff4d8);
+    button(cx - bw * 0.5f, cy + 20, bw, bh, T_STONE_BRICK, false);
+    textCentered("SAVE AND QUIT", cx, cy + 33, 1.9f, 0xfff4d8);
+    textCentered("ESC TO RESUME", cx, cy + 96, 1.3f, 0xa89c80);
 }
 
 // ------------------------------------------------------------------ entry

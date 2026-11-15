@@ -75,7 +75,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     if (msg == WM_SETCURSOR) {
-        if (LOWORD(lp) == HTCLIENT) { SetCursor(nullptr); return TRUE; }
+        if (LOWORD(lp) == HTCLIENT) {
+            if (g_mouseCaptured) { SetCursor(nullptr); return TRUE; }
+            SetCursor(LoadCursorA(nullptr, IDC_ARROW));
+            return TRUE;
+        }
     }
     return DefWindowProc(hwnd, msg, wp, lp);
 }
@@ -83,8 +87,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 static void setMouseCapture(bool on) {
     if (on == g_mouseCaptured) return;
     g_mouseCaptured = on;
-    ShowCursor(on ? FALSE : TRUE);
     if (on) {
+        SetCursor(nullptr);
         RECT r;
         GetClientRect(g_hwnd, &r);
         POINT c = { (r.right - r.left) / 2, (r.bottom - r.top) / 2 };
@@ -93,6 +97,7 @@ static void setMouseCapture(bool on) {
         SetCapture(g_hwnd);
     } else {
         ReleaseCapture();
+        SetCursor(LoadCursorA(nullptr, IDC_ARROW));
     }
 }
 
@@ -233,6 +238,12 @@ static void handleActions(Game& g) {
         setMouseCapture(!g.craftOpen && !g.paused);
     }
     if (g_input.keyDown[VK_F3]) g.showDebug = !g.showDebug;
+    if (g_input.keyDown[VK_F2]) {
+        static int filt = 0;
+        filt = (filt + 1) % 3;
+        renderSetFilter(g_render, filt);
+        g.notify(filt == 0 ? "TEXTURE FILTER: MIPMAP" : (filt == 1 ? "TEXTURE FILTER: NEAREST" : "TEXTURE FILTER: SMOOTH"));
+    }
     if (g_input.keyDown[VK_F1]) g.viewDistance = (g.viewDistance > 10.f) ? 6.f : g.viewDistance + 2.f;
     if (g_input.keyDown['F'] && g.mode == GM_CREATIVE) g.flying = !g.flying;
     if (g_input.keyDown[VK_F5]) {
@@ -251,7 +262,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int) {
     memset(&wc, 0, sizeof(wc));
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInst;
-    wc.hCursor = nullptr;
+    wc.hCursor = LoadCursorA(nullptr, IDC_ARROW);
     wc.hIcon = LoadIconA(hInst, MAKEINTRESOURCEA(IDI_VB_ICON));
     wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
     wc.lpszClassName = "VintageBlockWindow";

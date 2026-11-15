@@ -49,6 +49,7 @@ to resume.
 | `C` | crafting |
 | `F` | toggle flying (creative mode only) |
 | `F1` | cycle view distance |
+| `F2` | texture filter (crisp / smooth / nearest) |
 | `F3` | debug overlay |
 | `F5` | save now |
 | `Esc` | pause menu / close a window |
@@ -118,9 +119,14 @@ knife, a flint axe, a flint pickaxe, torches, some bread and seeds.
 * **Sky.** Gradient sky driven by a day/night palette, sun and moon billboards, 220
   hash-placed stars, two scrolling procedural cloud layers, linear fog matched to the
   horizon colour, rain and snow.
-* **UI** is immediate mode: a 5×7 bitmap font, an item/block icon atlas, a procedural
-  minimap of the whole bounded world, durability bars, a damage flash, and the
-  crosshair/held-item view.
+* **UI** is built from the same atlas: every panel, slot, button and menu background is
+  a tiled 8×8 block texture with a bevelled frame, so nothing on screen is a flat colour
+  rectangle. A 5×7 bitmap font, a procedural minimap of the whole bounded world,
+  durability bars, a damage flash, and the crosshair/held-item view sit on top.
+* Texture filtering is switchable at runtime (`F2`) between crisp nearest, smooth
+  trilinear and plain nearest — useful for comparing LOD seams.
+
+![Inventory](docs/screenshot-inventory.png)
 
 ![Crafting](docs/screenshot-crafting.png)
 

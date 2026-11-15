@@ -36,6 +36,40 @@ static void speckles(Px& p, u32 col, u32 seed, int count) {
     Rng r(seed * 7919u + 13);
     for (int i = 0; i < count; i++) setPx(p, r.irange(0, 7), r.irange(0, 7), col);
 }
+// clumped grain : a material with texture instead of television static
+static void grain(Px& p, u32 base, u32 alt, u32 seed, int clumps = 9) {
+    for (int y = 0; y < 8; y++)
+        for (int x = 0; x < 8; x++) p.c[y][x] = base;
+    Rng r(seed * 2246822519u + 17);
+    for (int i = 0; i < clumps; i++) {
+        int x = r.irange(0, 7), y = r.irange(0, 7);
+        int w = r.irange(1, 2), h = r.irange(1, 2);
+        u32 c = (r.irange(0, 3) == 0) ? shadeColor(alt, 0.92f) : alt;
+        for (int yy = 0; yy < h; yy++)
+            for (int xx = 0; xx < w; xx++)
+                p.c[imin(7, y + yy)][imin(7, x + xx)] = c;
+    }
+}
+// stone : grain + lit facet + shadowed facet + a thin crack
+static void rockFace(Px& p, u32 base, u32 seed) {
+    grain(p, base, shadeColor(base, 0.90f), seed, 11);
+    Rng r(seed * 7919u + 3);
+    u32 light = shadeColor(base, 1.13f), dark = shadeColor(base, 0.78f);
+    int fx = r.irange(0, 3), fy = r.irange(0, 3);
+    p.c[fy][fx] = light;
+    p.c[fy][imin(7, fx + 1)] = light;
+    p.c[imin(7, fy + 1)][fx] = shadeColor(base, 1.05f);
+    int gx = r.irange(4, 7), gy = r.irange(4, 7);
+    p.c[gy][gx] = dark;
+    p.c[gy][imax(0, gx - 1)] = shadeColor(base, 0.85f);
+    int cx = r.irange(2, 5), cy = 0;
+    for (int i = 0; i < 5; i++) {
+        p.c[imin(7, cy)][clampi(cx, 0, 7)] = shadeColor(base, 0.8f);
+        cy++;
+        cx += r.irange(-1, 1);
+    }
+    for (int i = 0; i < 3; i++) p.c[r.irange(0, 7)][r.irange(0, 7)] = shadeColor(base, 0.85f);
+}
 static void vShade(Px& p, float topF, float botF) {
     for (int y = 0; y < 8; y++) {
         float f = lerpf(topF, botF, y / 7.f);
@@ -92,35 +126,57 @@ static void paintTile(int t, Px& p) {
             for (int y = 0; y < d; y++) p.c[y][x] = (hash2i(x, y, s + 1) & 1) ? 0xe8ecef : 0xf4f7fa;
         }
     } break;
-    case T_DIRT: fillNoise(p, 0x7a5a3c, 0x866444, s, 42); speckles(p, 0x6a4c32, s, 6); break;
-    case T_SAND: fillNoise(p, 0xd9c489, 0xe4d29a, s, 45); speckles(p, 0xc9b478, s, 5); break;
-    case T_RED_SAND: fillNoise(p, 0xb06a3e, 0xc07a48, s, 45); speckles(p, 0x9a5a34, s, 5); break;
+    case T_DIRT: {
+        grain(p, 0x7d5c3e, 0x8a6746, s, 10);
+        Rng r(s);
+        for (int i = 0; i < 4; i++) p.c[r.irange(0, 7)][r.irange(0, 7)] = 0x6a4c32;
+        for (int i = 0; i < 3; i++) p.c[r.irange(0, 7)][r.irange(0, 7)] = 0x94714e;
+    } break;
+    case T_SAND: {
+        grain(p, 0xdcc78c, 0xe6d49c, s, 8);
+        for (int x = 0; x < 8; x++) { p.c[2][x] = 0xd2bd82; p.c[5][x] = 0xe9d9a6; }
+        Rng r(s);
+        for (int i = 0; i < 5; i++) p.c[r.irange(0, 7)][r.irange(0, 7)] = 0xcbb57a;
+    } break;
+    case T_RED_SAND: {
+        grain(p, 0xb46e42, 0xc27c4c, s, 8);
+        for (int x = 0; x < 8; x++) { p.c[2][x] = 0xa8653c; p.c[5][x] = 0xc98352; }
+        Rng r(s);
+        for (int i = 0; i < 5; i++) p.c[r.irange(0, 7)][r.irange(0, 7)] = 0x9e5f38;
+    } break;
     case T_GRAVEL: {
-        fillNoise(p, 0x8a8278, 0x6f6a62, s, 50);
-        speckles(p, 0xa8a096, s, 7); speckles(p, 0x5c5850, s + 1, 6);
+        grain(p, 0x8a8278, 0x736e66, s, 12);
+        Rng r(s);
+        for (int i = 0; i < 6; i++) {
+            int x = r.irange(0, 6), y = r.irange(0, 6);
+            u32 c = (i & 1) ? 0xa8a096 : 0x5c5850;
+            p.c[y][x] = c; p.c[y][x + 1] = c; p.c[y + 1][x] = shadeColor(c, 0.92f);
+        }
     } break;
-    case T_CLAY: fillNoise(p, 0x9a9aa8, 0xa8a8b6, s, 35); speckles(p, 0x8a8a98, s, 5); break;
-    case T_PEAT: fillNoise(p, 0x4a3a24, 0x3a2c1a, s, 45); speckles(p, 0x2e2214, s, 6); break;
-    case T_SNOW: fillNoise(p, 0xeef2f5, 0xfbfdff, s, 40); break;
-    case T_PERMAFROST: fillNoise(p, 0x8a8070, 0x9a9080, s, 40); speckles(p, 0xb0b8c0, s, 4); break;
+    case T_CLAY: grain(p, 0x9c9caa, 0xa9a9b7, s, 7); speckles(p, 0x8c8c9a, s, 4); break;
+    case T_PEAT: grain(p, 0x4c3c26, 0x3c2e1c, s, 10); speckles(p, 0x2e2214, s, 5); break;
+    case T_SNOW: grain(p, 0xf0f4f7, 0xfcfdff, s, 6); speckles(p, 0xe2e9ef, s, 4); break;
+    case T_PERMAFROST: grain(p, 0x8c8272, 0x9b9181, s, 9); speckles(p, 0xb0b8c0, s, 4); break;
     // ---------------- rock
-    case T_GRANITE: fillNoise(p, 0x9a8f88, 0x8a7f78, s, 50);
-        speckles(p, 0xb0a49a, s, 6); speckles(p, 0x6e645e, s + 1, 5); break;
-    case T_ANDESITE: fillNoise(p, 0x8a8a86, 0x7c7c78, s, 50);
-        speckles(p, 0x9a9a96, s, 5); speckles(p, 0x66665f, s + 1, 4); break;
-    case T_BASALT: fillNoise(p, 0x585a60, 0x4a4c52, s, 50); speckles(p, 0x6c6e74, s, 4); break;
-    case T_LIMESTONE: fillNoise(p, 0xbfb79f, 0xcdc6ae, s, 45); speckles(p, 0xa8a08a, s, 5); break;
-    case T_CHALK: fillNoise(p, 0xc9c4b3, 0xd8d3c2, s, 40); speckles(p, 0xbcb7a6, s, 4); break;
-    case T_SLATE: fillNoise(p, 0x6a7080, 0x5e6474, s, 45);
-        for (int x = 0; x < 8; x++) if (hash2i(x, 1, s) % 3 == 0) p.c[3][x] = 0x565c6c; break;
-    case T_SANDSTONE: {
-        fillNoise(p, 0xcaa878, 0xd8b98a, s, 45);
-        for (int y = 0; y < 8; y += 3) for (int x = 0; x < 8; x++) p.c[y][x] = shadeColor(p.c[y][x], 0.88f);
+    case T_GRANITE: rockFace(p, 0x9a8f88, s); break;
+    case T_ANDESITE: rockFace(p, 0x8a8a86, s); break;
+    case T_BASALT: rockFace(p, 0x585a60, s); break;
+    case T_LIMESTONE: rockFace(p, 0xbfb79f, s); break;
+    case T_CHALK: rockFace(p, 0xc9c4b3, s); break;
+    case T_SLATE: {
+        rockFace(p, 0x6a7080, s);
+        for (int y = 1; y < 8; y += 3) for (int x = 0; x < 8; x++) p.c[y][x] = shadeColor(p.c[y][x], 0.86f);
     } break;
-    case T_PERIDOTITE: fillNoise(p, 0x6a7a55, 0x5c6c48, s, 45); speckles(p, 0x8a9a6a, s, 6); break;
-    case T_KIMBERLITE: fillNoise(p, 0x55687a, 0x475a6c, s, 48); speckles(p, 0x7a8ea0, s, 5); break;
-    case T_SHALE: fillNoise(p, 0x777f88, 0x696f78, s, 45);
-        for (int y = 0; y < 8; y += 2) for (int x = 0; x < 8; x++) if (hash2i(x, y, s) & 1) p.c[y][x] = 0x60666e; break;
+    case T_SANDSTONE: {
+        rockFace(p, 0xcaa878, s);
+        for (int y = 0; y < 8; y += 3) for (int x = 0; x < 8; x++) p.c[y][x] = shadeColor(p.c[y][x], 0.9f);
+    } break;
+    case T_PERIDOTITE: rockFace(p, 0x6a7a55, s); break;
+    case T_KIMBERLITE: rockFace(p, 0x55687a, s); break;
+    case T_SHALE: {
+        rockFace(p, 0x777f88, s);
+        for (int y = 0; y < 8; y += 2) for (int x = 0; x < 8; x++) if (hash2i(x, y, s) & 1) p.c[y][x] = 0x60666e;
+    } break;
     case T_COBBLE_GREY: case T_COBBLE_WARM: case T_COBBLE_DARK: {
         u32 base = t == T_COBBLE_GREY ? 0x8a8a86 : (t == T_COBBLE_WARM ? 0x9a8b7a : 0x5e6066);
         fillNoise(p, base, shadeColor(base, 1.15f), s, 30);
@@ -148,7 +204,7 @@ static void paintTile(int t, Px& p) {
     case T_ORE_COPPER: case T_ORE_TIN: case T_ORE_LEAD: case T_ORE_ZINC: case T_ORE_IRON:
     case T_ORE_MAGNETITE: case T_ORE_GOLD: case T_ORE_SILVER: case T_ORE_COAL:
     case T_ORE_LIGNITE: case T_ORE_QUARTZ: {
-        fillNoise(p, 0x7a7a76, 0x6a6a66, s, 45);
+        rockFace(p, 0x7a7a76, s);
         u32 c1 = 0xff8833, c2 = 0xcc6622;
         switch (t) {
         case T_ORE_COPPER: c1 = 0x2ea88a; c2 = 0x1f7f68; break;
@@ -167,7 +223,8 @@ static void paintTile(int t, Px& p) {
         for (int k = 0; k < 3; k++) {
             int cx = r.irange(1, 5), cy = r.irange(1, 5);
             setPx(p, cx, cy, c1);
-            setPx(p, cx + 1, cy, c1); setPx(p, cx, cy + 1, c2); setPx(p, cx - 1, cy + 1, c2);
+            setPx(p, cx + 1, cy, shadeColor(c1, 1.1f));
+            setPx(p, cx, cy + 1, c2); setPx(p, cx - 1, cy + 1, c2);
             setPx(p, cx + 1, cy + 1, c2); setPx(p, cx - 1, cy, c2);
         }
     } break;
@@ -183,10 +240,15 @@ static void paintTile(int t, Px& p) {
         case T_LOG_ACACIA_S: bark = 0x6a4a34; break;
         case T_LOG_KAPOK_S: bark = 0x7a6a52; break;
         }
-        fillNoise(p, bark, shadeColor(bark, 1.12f), s, 35);
+        grain(p, bark, shadeColor(bark, 1.1f), s, 8);
         for (int x = 0; x < 8; x++) {
-            if (hash2i(x, 0, s) % 3 == 0) for (int y = 0; y < 8; y++) p.c[y][x] = shadeColor(bark, 0.82f);
+            int k = (int)(hash2i(x, 0, s) % 3);
+            if (k == 0) for (int y = 0; y < 8; y++) p.c[y][x] = shadeColor(bark, 0.78f);
+            else if (k == 1) for (int y = 0; y < 8; y++) p.c[y][x] = shadeColor(bark, 1.14f);
         }
+        { Rng r(s + 5); int kx = r.irange(2, 5), ky = r.irange(2, 5);
+          p.c[ky][kx] = shadeColor(bark, 0.62f); p.c[ky][kx + 1] = shadeColor(bark, 0.62f);
+          p.c[ky + 1][kx] = shadeColor(bark, 0.7f); }
         if (t == T_LOG_BIRCH_S) { for (int x = 0; x < 8; x += 3) { p.c[2][x] = 0x3a3a38; p.c[2][x + 1] = 0x3a3a38; p.c[6][x] = 0x3a3a38; } }
     } break;
     case T_LOG_PINE_T: case T_LOG_OAK_T: case T_LOG_BIRCH_T: case T_LOG_MAPLE_T:
@@ -218,10 +280,12 @@ static void paintTile(int t, Px& p) {
         case T_PLANK_ACACIA: wood = 0xb07a4a; break;
         case T_PLANK_KAPOK: wood = 0xc0a87a; break;
         }
-        fillNoise(p, wood, shadeColor(wood, 1.06f), s, 30);
-        for (int x = 0; x < 8; x++) { p.c[3][x] = shadeColor(wood, 0.82f); p.c[7][x] = shadeColor(wood, 0.78f); }
-        p.c[1][2] = p.c[1][5] = shadeColor(wood, 0.9f);
-        p.c[5][3] = p.c[5][6] = shadeColor(wood, 0.9f);
+        grain(p, wood, shadeColor(wood, 1.07f), s, 7);
+        u32 seam = shadeColor(wood, 0.62f);
+        for (int x = 0; x < 8; x++) { p.c[3][x] = seam; p.c[7][x] = seam; }
+        p.c[4][0] = p.c[4][1] = seam; p.c[0][6] = p.c[0][7] = seam;   // staggered butt joints
+        for (int x = 0; x < 8; x++) { p.c[2][x] = shadeColor(wood, 1.12f); p.c[6][x] = shadeColor(wood, 1.1f); }
+        p.c[1][3] = p.c[5][2] = shadeColor(wood, 0.85f);
     } break;
     case T_LEAF_PINE: case T_LEAF_OAK: case T_LEAF_BIRCH: case T_LEAF_MAPLE:
     case T_LEAF_ACACIA: case T_LEAF_KAPOK: {
@@ -234,14 +298,16 @@ static void paintTile(int t, Px& p) {
         case T_LEAF_ACACIA: g = 0x6b8a44; g2 = 0x7d9c52; break;
         case T_LEAF_KAPOK: g = 0x467a3a; g2 = 0x568c48; break;
         }
-        Rng r(s);
+        u32 g3 = shadeColor(g, 1.22f);
         for (int y = 0; y < 8; y++)
             for (int x = 0; x < 8; x++) {
-                int h = (int)(hash2i(x, y, s) % 100);
-                if (h < 16) p.c[y][x] = 0;                 // gaps
-                else p.c[y][x] = (h < 55) ? g : g2;
+                int clump = (int)(hash2i(x / 2, y / 2, s) % 100);   // 4x4 leaf clusters
+                int fine = (int)(hash2i(x, y, s + 91) % 100);
+                if (clump < 22 && fine < 70) { p.c[y][x] = 0; continue; }   // see-through gaps
+                if (fine < 26) p.c[y][x] = g3;
+                else if (fine < 62) p.c[y][x] = g2;
+                else p.c[y][x] = g;
             }
-        (void)r;
     } break;
     // ---------------- plants
     case T_TALLGRASS: {

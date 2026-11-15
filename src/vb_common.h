@@ -2,7 +2,7 @@
 // vb_common.h : math, hashing, noise, small utilities (platform independent)
 #pragma once
 
-#define VB_VERSION "0.1.0"
+#define VB_VERSION "0.1.1"
 #define VB_VERSION_TAG "indev"
 #include <cstdint>
 #include <cstddef>

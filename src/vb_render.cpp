@@ -55,6 +55,7 @@ struct Renderer {
     int statChunks = 0;
     float farCenterX = -9999, farCenterZ = -9999;
     std::vector<ChunkMesh*> trash;
+    int filter = 0;
     int frames = 0;
 };
 
@@ -118,6 +119,35 @@ static void loadVboFuncs() {
     g_haveVBO = pglGenBuffers && pglBindBuffer && pglBufferData && pglDeleteBuffers;
 }
 
+// 0xAARRGGBB -> byte order R,G,B,A that glTexImage2D(GL_RGBA) actually wants
+static std::vector<unsigned char> toRGBA(const u32* px, int count) {
+    std::vector<unsigned char> out((size_t)count * 4);
+    for (int i = 0; i < count; i++) {
+        u32 c = px[i];
+        out[(size_t)i * 4 + 0] = (unsigned char)((c >> 16) & 255);
+        out[(size_t)i * 4 + 1] = (unsigned char)((c >> 8) & 255);
+        out[(size_t)i * 4 + 2] = (unsigned char)(c & 255);
+        out[(size_t)i * 4 + 3] = (unsigned char)((c >> 24) & 255);
+    }
+    return out;
+}
+
+// box filter a level into the next one (keeps the mip chain complete, which
+// some drivers require before they will sample the texture at all)
+static void downBox(const u32* src, int sw, u32* dst, int dw) {
+    for (int y = 0; y < dw; y++)
+        for (int x = 0; x < dw; x++) {
+            u32 r = 0, g = 0, b = 0, a = 0;
+            for (int sy = 0; sy < 2; sy++)
+                for (int sx = 0; sx < 2; sx++) {
+                    int px = imin(sw - 1, x * 2 + sx), py = imin(sw - 1, y * 2 + sy);
+                    u32 c = src[(size_t)py * sw + px];
+                    r += (c >> 16) & 255; g += (c >> 8) & 255; b += c & 255; a += (c >> 24) & 255;
+                }
+            dst[(size_t)y * dw + x] = ((a / 4) << 24) | ((r / 4) << 16) | ((g / 4) << 8) | (b / 4);
+        }
+}
+
 static void uploadAtlas(Renderer* r) {
     glGenTextures(1, &r->atlas);
     glBindTexture(GL_TEXTURE_2D, r->atlas);
@@ -125,19 +155,19 @@ static void uploadAtlas(Renderer* r) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
     int size = ATLAS_SIZE;
-    std::vector<u32> buf;
-    for (int level = 0; level <= 8 && size >= 1; level++) {
-        buf.resize((size_t)size * size);
-        if (level <= 3) {
-            buildAtlasLevel(buf.data(), size, level);
-        } else {
-            // simple box filter down to 1x1
-            glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA, size, size, 0, GL_RGBA, GL_UNSIGNED_BYTE, buf.data());
-            break;
-        }
-        glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA, size, size, 0, GL_RGBA, GL_UNSIGNED_BYTE, buf.data());
-        size /= 2;
+    std::vector<u32> level((size_t)size * size);
+    buildAtlasLevel(level.data(), size, 0);
+    for (int l = 0; size >= 1; l++) {
+        std::vector<unsigned char> bytes = toRGBA(level.data(), size * size);
+        glTexImage2D(GL_TEXTURE_2D, l, GL_RGBA, size, size, 0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.data());
+        if (size == 1) break;
+        int ns = size / 2;
+        std::vector<u32> next((size_t)ns * ns);
+        downBox(level.data(), size, next.data(), ns);
+        level.swap(next);
+        size = ns;
     }
 }
 
@@ -160,7 +190,8 @@ static void uploadFont(Renderer* r) {
     glBindTexture(GL_TEXTURE_2D, r->fontTex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.data());
+    std::vector<unsigned char> bytes = toRGBA(img.data(), W * H);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.data());
 }
 
 static void uploadClouds(Renderer* r) {
@@ -188,7 +219,8 @@ static void uploadClouds(Renderer* r) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, N, N, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.data());
+    std::vector<unsigned char> bytes = toRGBA(img.data(), N * N);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, N, N, 0, GL_RGBA, GL_UNSIGNED_BYTE, bytes.data());
 }
 
 bool renderInitGPU(Renderer* r) {
@@ -727,6 +759,24 @@ void renderScene(Renderer* r, Game& g, float timeSec) {
 
     glDisable(GL_FOG);
 }
+
+void renderSetFilter(Renderer* r, int mode) {
+    if (!r->atlas) return;
+    glBindTexture(GL_TEXTURE_2D, r->atlas);
+    if (mode == 0) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    } else if (mode == 1) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    } else {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    }
+    r->filter = mode;
+}
+
+int renderGetFilter(Renderer* r) { return r->filter; }
 
 unsigned int renderAtlas(Renderer* r) { return r->atlas; }
 unsigned int renderFontTex(Renderer* r) { return r->fontTex; }
